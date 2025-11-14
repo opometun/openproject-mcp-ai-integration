@@ -209,8 +209,17 @@ Set `LOG_LEVEL=DEBUG` to trace HTTP calls. The server mutes noisy `httpx` logs w
 
 Please avoid committing secrets—`.env` is gitignored, and `errors.py` scrubs sensitive tokens from exception text.
 
+## Credits & Origins
+
+This codebase was originally forked from the
+[`openproject-mcp-server`](https://github.com/AndyEverything/openproject-mcp-server)
+project by **AndyEverything** (MIT-licensed). Under Oleksandr Pometun's
+maintenance it has since been heavily refactored into a distinct implementation
+with a different architecture, tooling setup, and feature scope aimed at a
+production-ready MCP server and portfolio reference.
+
 ## License
-Distributed under the MIT License. See `LICENSE` (or the repository root) for the full text.
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
 
 ## Acknowledgements
 - Inspired by the [Model Context Protocol](https://modelcontextprotocol.io/) community work.
