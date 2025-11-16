@@ -213,3 +213,4 @@ CLAUDE.md
 config/claude.mcp.json
 
 .vscode/
+.DS_Store
