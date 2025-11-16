@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import base64
 from contextlib import asynccontextmanager
 import httpx
 
@@ -48,8 +49,9 @@ class OpenProjectClient:
 
     @property
     def headers(self) -> dict:
+        token = base64.b64encode(f"apikey:{self.settings.api_key}".encode()).decode()
         return {
-            "Authorization": f"apikey {self.settings.api_key}",
+            "Authorization": f"Basic {token}",
             "Accept": "application/json",
         }
 
