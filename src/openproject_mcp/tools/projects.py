@@ -16,21 +16,8 @@ from openproject_mcp.errors import map_http_error
 class ListProjectsIn(BaseModel):
     """Input parameters for listing projects"""
 
-    page_size: int = Field(200, description="Number of results per page", gt=0, le=1000)
-    offset: int = Field(1, description="Page offset for pagination", gt=0)
     active_only: bool = Field(
-        True, description="If True, return only active projects"
-    )
-    filters: Optional[Dict[str, Any]] = Field(
-        None, description="Optional filters to apply (e.g., active status)"
-    )
-    sort_by: Optional[str] = Field(
-        None, description="Sort order, e.g., 'name' or 'created_at'"
-    )
-    follow: Optional[int] = Field(
-        None,
-        description="Optional: collect across pages up to this many results",
-        gt=0,
+        False, description="If True, return only active projects. If False, return all projects"
     )
 
 
@@ -111,100 +98,25 @@ def register(server: FastMCP, settings: Settings | None = None):
         """
         Retrieve a list of all projects accessible to the authenticated user.
 
-            Supports pagination, filtering, and sorting.
-
         Args:
-            params: Validated input with page_size, offset, filters, and sort_by
+            params: Validated input with active_only flag
 
         Returns:
             dict: Collection of project objects
 
         Note:
             - Returns projects the user has access to view
-            - Supports custom filters (e.g., active projects only)
-            - Default page size is 200, maximum is 1000
-            - Results include project metadata like id, identifier, name, description
-            - When follow is provided, collects results across pages up to the limit
+            - By default shows all projects (active and inactive)
+            - Set active_only=True to filter to only active projects
         """
         try:
             # Build query parameters
-            query_params = {
-                "pageSize": params.page_size,
-                "offset": params.offset,
-            }
-
-            # Build filters list
-            filters = []
+            query_params = {"pageSize": 1000}  # Get all projects in one request
             
             # Add active filter if requested
             if params.active_only:
-                filters.append({
-                    "active": {
-                        "operator": "=",
-                        "values": ["t"]
-                    }
-                })
-
-            # Add custom filters if provided
-            if params.filters:
-                for filter_id, filter_config in params.filters.items():
-                    if isinstance(filter_config, dict) and "operator" in filter_config:
-                        filters.append(
-                            {
-                                filter_id: {
-                                    "operator": filter_config["operator"],
-                                    "values": filter_config.get("values", []),
-                                }
-                            }
-                        )
-            
-            if filters:
+                filters = [{"active": {"operator": "=", "values": ["t"]}}]
                 query_params["filters"] = json.dumps(filters)
-
-            # Add sorting if provided
-            if params.sort_by:
-                # Convert simple string to OpenProject sortBy format
-                # e.g., "name" -> [["name", "asc"]]
-                sort_order = "asc"
-                sort_field = params.sort_by
-                if params.sort_by.startswith("-"):
-                    sort_order = "desc"
-                    sort_field = params.sort_by[1:]
-                query_params["sortBy"] = json.dumps([[sort_field, sort_order]])
-
-            # If follow parameter is provided, collect across pages
-            if params.follow:
-                all_elements = []
-                current_offset = params.offset
-
-                while len(all_elements) < params.follow:
-                    query_params["offset"] = current_offset
-                    res = await client.get("/projects", params=query_params)
-                    data = res.json()
-
-                    elements = data.get("_embedded", {}).get("elements", [])
-                    if not elements:
-                        break
-
-                    all_elements.extend(elements)
-
-                    # Stop if we've collected everything the server says exists
-                    if len(all_elements) >= data.get("total", 0):
-                        break
-
-                    current_offset += params.page_size
-
-                # Trim to follow limit
-                all_elements = all_elements[: params.follow]
-
-                return {
-                    "_type": "Collection",
-                    "count": len(all_elements),
-                    "total": len(all_elements),
-                    "pageSize": params.page_size,
-                    "offset": params.offset,
-                    "_embedded": {"elements": all_elements},
-                }
 
             # Single page request
             res = await client.get("/projects", params=query_params)
@@ -212,6 +124,7 @@ def register(server: FastMCP, settings: Settings | None = None):
 
         except httpx.HTTPStatusError as e:
             map_http_error(e.response.status_code, e.response.text[:300])
+            
 
     @server.tool(
         "get_project_memberships",
