@@ -50,7 +50,6 @@ class OpenProjectClient:
     def headers(self) -> dict:
         return {
             "Authorization": f"apikey {self.settings.api_key}",
-            "Content-Type": "application/json",
             "Accept": "application/json",
         }
 

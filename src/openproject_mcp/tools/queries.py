@@ -161,17 +161,20 @@ def register(server: FastMCP, settings: Settings | None = None):
 
                 payload["filters"] = list(existing_filters.values())
 
-            # Execute the query by posting to the query results endpoint
-            # Use the _links.results href if available, otherwise construct it
+            # Execute the query:
+            # - If overrides are provided, post the merged payload to /queries/default
+            #   so overrides are honored (results link may not accept POST on all setups).
+            # - Otherwise, follow the provided results link with GET (standard API flow).
             results_href = query_data.get("_links", {}).get("results", {}).get("href")
 
-            if results_href:
+            if params.overrides:
+                res = await client.post("/queries/default", json=payload)
+            elif results_href:
                 # Strip /api/v3 prefix if present since client adds it
                 if results_href.startswith("/api/v3"):
                     results_href = results_href[7:]  # Remove "/api/v3"
                 res = await client.get(results_href)
             else:
-                # Fall back to posting the query configuration
                 res = await client.post("/queries/default", json=payload)
 
             return res.json()

@@ -4,6 +4,7 @@ from typing import Optional, Dict
 import httpx
 import os
 import mimetypes
+import json
 
 from openproject_mcp.config import Settings
 from openproject_mcp.client import OpenProjectClient
@@ -160,7 +161,7 @@ def register(server: FastMCP, settings: Settings | None = None):
 
             # Upload using multipart/form-data
             files = {
-                "metadata": (None, str(metadata), "application/json"),
+                "metadata": (None, json.dumps(metadata), "application/json"),
                 "file": (
                     os.path.basename(params.file_path),
                     file_content,

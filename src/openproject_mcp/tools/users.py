@@ -2,6 +2,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 from typing import Optional, Dict
 import httpx
+import json
 
 from openproject_mcp.config import Settings
 from openproject_mcp.client import OpenProjectClient
@@ -113,7 +114,7 @@ def register(server: FastMCP, settings: Settings | None = None):
             ]
 
             query_params = {
-                "filters": str(filters),
+                "filters": json.dumps(filters),
                 "pageSize": params.limit,
             }
 

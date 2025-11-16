@@ -19,6 +19,18 @@ class ListProjectsIn(BaseModel):
     active_only: bool = Field(
         False, description="If True, return only active projects. If False, return all projects"
     )
+    page_size: int = Field(
+        100, description="Number of results per page", gt=0, le=1000
+    )
+    offset: int = Field(1, description="Page offset (1-based)", gt=0)
+    sort_by: Optional[str] = Field(
+        None, description="Sort field, prefix with '-' for descending (e.g., '-created_at')"
+    )
+    follow: Optional[int] = Field(
+        None,
+        description="Optional: collect across pages up to this many results",
+        gt=0,
+    )
 
 
 class GetProjectMembershipsIn(BaseModel):
@@ -110,16 +122,57 @@ def register(server: FastMCP, settings: Settings | None = None):
             - Set active_only=True to filter to only active projects
         """
         try:
-            # Build query parameters
-            query_params = {"pageSize": 1000}  # Get all projects in one request
-            
-            # Add active filter if requested
-            if params.active_only:
-                filters = [{"active": {"operator": "=", "values": ["t"]}}]
-                query_params["filters"] = json.dumps(filters)
+            def build_base_params() -> dict:
+                qp = {"pageSize": params.page_size, "offset": params.offset}
+
+                if params.active_only:
+                    filters = [{"active": {"operator": "=", "values": ["t"]}}]
+                    qp["filters"] = json.dumps(filters)
+
+                if params.sort_by:
+                    sort_order = "asc"
+                    sort_field = params.sort_by
+                    if params.sort_by.startswith("-"):
+                        sort_order = "desc"
+                        sort_field = params.sort_by[1:]
+                    qp["sortBy"] = json.dumps([[sort_field, sort_order]])
+
+                return qp
+
+            if params.follow:
+                all_elements = []
+                current_offset = params.offset
+
+                while len(all_elements) < params.follow:
+                    query_params = build_base_params()
+                    query_params["offset"] = current_offset
+                    res = await client.get("/projects", params=query_params)
+                    data = res.json()
+
+                    elements = data.get("_embedded", {}).get("elements", [])
+                    if not elements:
+                        break
+
+                    all_elements.extend(elements)
+
+                    if len(all_elements) >= data.get("total", 0):
+                        break
+
+                    current_offset += 1
+
+                all_elements = all_elements[: params.follow]
+
+                return {
+                    "_type": "Collection",
+                    "count": len(all_elements),
+                    "total": len(all_elements),
+                    "pageSize": params.page_size,
+                    "offset": params.offset,
+                    "_embedded": {"elements": all_elements},
+                }
 
             # Single page request
-            res = await client.get("/projects", params=query_params)
+            res = await client.get("/projects", params=build_base_params())
             return res.json()
 
         except httpx.HTTPStatusError as e:
@@ -173,7 +226,7 @@ def register(server: FastMCP, settings: Settings | None = None):
             query_params = {
                 "pageSize": params.page_size,
                 "offset": params.offset,
-                "filters": str(filters),
+                "filters": json.dumps(filters),
             }
 
             # If follow parameter is provided, collect across pages

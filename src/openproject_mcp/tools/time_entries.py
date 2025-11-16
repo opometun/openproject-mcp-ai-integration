@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import httpx
 from datetime import date
+import json
 
 from openproject_mcp.config import Settings
 from openproject_mcp.client import OpenProjectClient
@@ -193,7 +194,7 @@ def register(server: FastMCP, settings: Settings | None = None):
             }
 
             if filters:
-                query_params["filters"] = str(filters)
+                query_params["filters"] = json.dumps(filters)
 
             res = await client.get("/time_entries", params=query_params)
             return res.json()
