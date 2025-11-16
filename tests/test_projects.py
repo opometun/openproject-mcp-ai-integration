@@ -187,6 +187,66 @@ class TestListProjects:
 
     @respx.mock
     @pytest.mark.asyncio
+    async def test_list_projects_with_follow(self, server, base_url):
+        """Test collecting projects across multiple pages."""
+        import json
+
+        page1_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 5,
+            "pageSize": 2,
+            "offset": 1,
+            "_embedded": {
+                "elements": [
+                    {"id": 1, "identifier": "proj-1", "name": "Project 1"},
+                    {"id": 2, "identifier": "proj-2", "name": "Project 2"},
+                ]
+            },
+        }
+
+        page2_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 5,
+            "pageSize": 2,
+            "offset": 2,
+            "_embedded": {
+                "elements": [
+                    {"id": 3, "identifier": "proj-3", "name": "Project 3"},
+                    {"id": 4, "identifier": "proj-4", "name": "Project 4"},
+                ]
+            },
+        }
+
+        page3_response = {
+            "_type": "Collection",
+            "count": 1,
+            "total": 5,
+            "pageSize": 2,
+            "offset": 3,
+            "_embedded": {"elements": [{"id": 5, "identifier": "proj-5", "name": "Project 5"}]},
+        }
+
+        route = respx.get(f"{base_url}/projects").mock(
+            side_effect=[
+                httpx.Response(200, json=page1_response),
+                httpx.Response(200, json=page2_response),
+                httpx.Response(200, json=page3_response),
+            ]
+        )
+
+        result = await server.call_tool(
+            "list_projects", {"params": {"page_size": 2, "follow": 5}}
+        )
+
+        assert route.call_count == 3
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 5
+        assert len(response_data["_embedded"]["elements"]) == 5
+
+    @respx.mock
+    @pytest.mark.asyncio
     async def test_list_projects_empty(self, server, base_url):
         """Test listing when no projects exist."""
         import json

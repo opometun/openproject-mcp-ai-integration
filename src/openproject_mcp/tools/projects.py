@@ -1,5 +1,6 @@
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
+import json
 from typing import Optional, Dict, Any
 import httpx
 
@@ -15,13 +16,21 @@ from openproject_mcp.errors import map_http_error
 class ListProjectsIn(BaseModel):
     """Input parameters for listing projects"""
 
-    page_size: int = Field(100, description="Number of results per page", gt=0, le=1000)
+    page_size: int = Field(200, description="Number of results per page", gt=0, le=1000)
     offset: int = Field(1, description="Page offset for pagination", gt=0)
+    active_only: bool = Field(
+        True, description="If True, return only active projects"
+    )
     filters: Optional[Dict[str, Any]] = Field(
         None, description="Optional filters to apply (e.g., active status)"
     )
     sort_by: Optional[str] = Field(
         None, description="Sort order, e.g., 'name' or 'created_at'"
+    )
+    follow: Optional[int] = Field(
+        None,
+        description="Optional: collect across pages up to this many results",
+        gt=0,
     )
 
 
@@ -102,7 +111,7 @@ def register(server: FastMCP, settings: Settings | None = None):
         """
         Retrieve a list of all projects accessible to the authenticated user.
 
-        Supports pagination, filtering, and sorting.
+            Supports pagination, filtering, and sorting.
 
         Args:
             params: Validated input with page_size, offset, filters, and sort_by
@@ -113,8 +122,9 @@ def register(server: FastMCP, settings: Settings | None = None):
         Note:
             - Returns projects the user has access to view
             - Supports custom filters (e.g., active projects only)
-            - Default page size is 100, maximum is 1000
+            - Default page size is 200, maximum is 1000
             - Results include project metadata like id, identifier, name, description
+            - When follow is provided, collects results across pages up to the limit
         """
         try:
             # Build query parameters
@@ -123,9 +133,20 @@ def register(server: FastMCP, settings: Settings | None = None):
                 "offset": params.offset,
             }
 
-            # Add filters if provided
+            # Build filters list
+            filters = []
+            
+            # Add active filter if requested
+            if params.active_only:
+                filters.append({
+                    "active": {
+                        "operator": "=",
+                        "values": ["t"]
+                    }
+                })
+
+            # Add custom filters if provided
             if params.filters:
-                filters = []
                 for filter_id, filter_config in params.filters.items():
                     if isinstance(filter_config, dict) and "operator" in filter_config:
                         filters.append(
@@ -136,8 +157,9 @@ def register(server: FastMCP, settings: Settings | None = None):
                                 }
                             }
                         )
-                if filters:
-                    query_params["filters"] = str(filters)
+            
+            if filters:
+                query_params["filters"] = json.dumps(filters)
 
             # Add sorting if provided
             if params.sort_by:
@@ -148,8 +170,43 @@ def register(server: FastMCP, settings: Settings | None = None):
                 if params.sort_by.startswith("-"):
                     sort_order = "desc"
                     sort_field = params.sort_by[1:]
-                query_params["sortBy"] = str([[sort_field, sort_order]])
+                query_params["sortBy"] = json.dumps([[sort_field, sort_order]])
 
+            # If follow parameter is provided, collect across pages
+            if params.follow:
+                all_elements = []
+                current_offset = params.offset
+
+                while len(all_elements) < params.follow:
+                    query_params["offset"] = current_offset
+                    res = await client.get("/projects", params=query_params)
+                    data = res.json()
+
+                    elements = data.get("_embedded", {}).get("elements", [])
+                    if not elements:
+                        break
+
+                    all_elements.extend(elements)
+
+                    # Stop if we've collected everything the server says exists
+                    if len(all_elements) >= data.get("total", 0):
+                        break
+
+                    current_offset += params.page_size
+
+                # Trim to follow limit
+                all_elements = all_elements[: params.follow]
+
+                return {
+                    "_type": "Collection",
+                    "count": len(all_elements),
+                    "total": len(all_elements),
+                    "pageSize": params.page_size,
+                    "offset": params.offset,
+                    "_embedded": {"elements": all_elements},
+                }
+
+            # Single page request
             res = await client.get("/projects", params=query_params)
             return res.json()
 
@@ -226,7 +283,7 @@ def register(server: FastMCP, settings: Settings | None = None):
                     if len(all_elements) >= data.get("total", 0):
                         break
 
-                    current_offset += 1
+                    current_offset += params.page_size
 
                 # Trim to follow limit
                 all_elements = all_elements[: params.follow]
