@@ -37,6 +37,459 @@ def base_url(mock_settings):
 
 
 # ============================================================================
+# Test: create_work_package
+# ============================================================================
+
+
+class TestCreateWorkPackage:
+    """Test suite for create_work_package tool."""
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_minimal(self, server, base_url):
+        """Test creating a work package with minimal required fields."""
+        import json
+
+        expected_response = {
+            "id": 123,
+            "subject": "New Task",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/123"},
+                "project": {"href": "/api/v3/projects/1"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {"params": {"project_id": 1, "subject": "New Task"}},
+        )
+
+        assert route.called, "API endpoint was not called"
+        
+        # Verify the request payload
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["subject"] == "New Task"
+        assert request_body["_links"]["project"]["href"] == "/api/v3/projects/1"
+        
+        # Verify the response
+        response_data = json.loads(result[0].text)
+        assert response_data["id"] == 123
+        assert response_data["subject"] == "New Task"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_with_type(self, server, base_url):
+        """Test creating a work package with a specific type."""
+        import json
+
+        expected_response = {
+            "id": 124,
+            "subject": "Bug Report",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/124"},
+                "project": {"href": "/api/v3/projects/1"},
+                "type": {"href": "/api/v3/types/2"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {"params": {"project_id": 1, "subject": "Bug Report", "type_id": 2}},
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["_links"]["type"]["href"] == "/api/v3/types/2"
+        
+        response_data = json.loads(result[0].text)
+        assert response_data["id"] == 124
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_with_dates(self, server, base_url):
+        """Test creating a work package with start and due dates."""
+        import json
+
+        expected_response = {
+            "id": 125,
+            "subject": "Task with Dates",
+            "startDate": "2024-01-15",
+            "dueDate": "2024-01-31",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/125"},
+                "project": {"href": "/api/v3/projects/1"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {
+                "params": {
+                    "project_id": 1,
+                    "subject": "Task with Dates",
+                    "start_date": "2024-01-15",
+                    "due_date": "2024-01-31",
+                }
+            },
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["startDate"] == "2024-01-15"
+        assert request_body["dueDate"] == "2024-01-31"
+        
+        response_data = json.loads(result[0].text)
+        assert response_data["startDate"] == "2024-01-15"
+        assert response_data["dueDate"] == "2024-01-31"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_with_description(self, server, base_url):
+        """Test creating a work package with markdown description."""
+        import json
+
+        markdown_desc = "# Description\n\nThis is a **test** description."
+        expected_response = {
+            "id": 126,
+            "subject": "Task with Description",
+            "description": {"raw": markdown_desc},
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/126"},
+                "project": {"href": "/api/v3/projects/1"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {
+                "params": {
+                    "project_id": 1,
+                    "subject": "Task with Description",
+                    "description": markdown_desc,
+                }
+            },
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["description"]["raw"] == markdown_desc
+        
+        response_data = json.loads(result[0].text)
+        assert response_data["description"]["raw"] == markdown_desc
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_with_assignee(self, server, base_url):
+        """Test creating a work package with an assignee."""
+        import json
+
+        expected_response = {
+            "id": 127,
+            "subject": "Assigned Task",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/127"},
+                "project": {"href": "/api/v3/projects/1"},
+                "assignee": {"href": "/api/v3/users/5"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {
+                "params": {
+                    "project_id": 1,
+                    "subject": "Assigned Task",
+                    "assignee_id": 5,
+                }
+            },
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["_links"]["assignee"]["href"] == "/api/v3/users/5"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_with_priority(self, server, base_url):
+        """Test creating a work package with priority."""
+        import json
+
+        expected_response = {
+            "id": 128,
+            "subject": "High Priority Task",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/128"},
+                "project": {"href": "/api/v3/projects/1"},
+                "priority": {"href": "/api/v3/priorities/3"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {
+                "params": {
+                    "project_id": 1,
+                    "subject": "High Priority Task",
+                    "priority_id": 3,
+                }
+            },
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["_links"]["priority"]["href"] == "/api/v3/priorities/3"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_with_estimated_time(self, server, base_url):
+        """Test creating a work package with estimated time."""
+        import json
+
+        expected_response = {
+            "id": 129,
+            "subject": "Task with Time Estimate",
+            "estimatedTime": "PT8H",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/129"},
+                "project": {"href": "/api/v3/projects/1"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {
+                "params": {
+                    "project_id": 1,
+                    "subject": "Task with Time Estimate",
+                    "estimated_time": "PT8H",
+                }
+            },
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["estimatedTime"] == "PT8H"
+        
+        response_data = json.loads(result[0].text)
+        assert response_data["estimatedTime"] == "PT8H"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_full_options(self, server, base_url):
+        """Test creating a work package with all optional fields."""
+        import json
+
+        expected_response = {
+            "id": 130,
+            "subject": "Complete Task",
+            "description": {"raw": "Full description"},
+            "startDate": "2024-02-01",
+            "dueDate": "2024-02-15",
+            "estimatedTime": "PT16H",
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/130"},
+                "project": {"href": "/api/v3/projects/1"},
+                "type": {"href": "/api/v3/types/1"},
+                "status": {"href": "/api/v3/statuses/2"},
+                "assignee": {"href": "/api/v3/users/3"},
+                "priority": {"href": "/api/v3/priorities/2"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {
+                "params": {
+                    "project_id": 1,
+                    "subject": "Complete Task",
+                    "type_id": 1,
+                    "status_id": 2,
+                    "description": "Full description",
+                    "assignee_id": 3,
+                    "start_date": "2024-02-01",
+                    "due_date": "2024-02-15",
+                    "estimated_time": "PT16H",
+                    "priority_id": 2,
+                }
+            },
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["subject"] == "Complete Task"
+        assert request_body["description"]["raw"] == "Full description"
+        assert request_body["startDate"] == "2024-02-01"
+        assert request_body["dueDate"] == "2024-02-15"
+        assert request_body["estimatedTime"] == "PT16H"
+        assert request_body["_links"]["type"]["href"] == "/api/v3/types/1"
+        assert request_body["_links"]["status"]["href"] == "/api/v3/statuses/2"
+        assert request_body["_links"]["assignee"]["href"] == "/api/v3/users/3"
+        assert request_body["_links"]["priority"]["href"] == "/api/v3/priorities/2"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_project_not_found(self, server, base_url):
+        """Test error handling when project doesn't exist."""
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(404, json={"message": "Project not found"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": 99999, "subject": "Test"}},
+            )
+
+        assert route.called
+        assert "Resource not found" in str(exc_info.value)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_unauthorized(self, server, base_url):
+        """Test error handling for unauthorized access."""
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(401, json={"message": "Unauthorized"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": 1, "subject": "Test"}},
+            )
+
+        assert route.called
+        assert "Authentication failed" in str(exc_info.value)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_forbidden(self, server, base_url):
+        """Test error handling when user lacks permission."""
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(403, json={"message": "Forbidden"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": 1, "subject": "Test"}},
+            )
+
+        assert route.called
+        assert "Permission denied" in str(exc_info.value)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_validation_error(self, server, base_url):
+        """Test error handling for invalid data."""
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(
+                422, json={"message": "Subject cannot be empty"}
+            )
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": 1, "subject": "Test"}},
+            )
+
+        assert route.called
+        assert "Validation failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_create_work_package_invalid_project_id(self, server):
+        """Test validation error for invalid project ID."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": -1, "subject": "Test"}},
+            )
+
+        assert "validation" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_create_work_package_empty_subject(self, server):
+        """Test validation error for empty subject."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": 1, "subject": ""}},
+            )
+
+        assert "validation" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_create_work_package_missing_required_params(self, server):
+        """Test validation error when required parameters are missing."""
+        with pytest.raises(ToolError):
+            await server.call_tool(
+                "create_work_package",
+                {"params": {"project_id": 1}},  # Missing 'subject'
+            )
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_create_work_package_unicode_subject(self, server, base_url):
+        """Test creating a work package with unicode characters in subject."""
+        import json
+
+        unicode_subject = "Task 世界 🌍 Привет"
+        expected_response = {
+            "id": 131,
+            "subject": unicode_subject,
+            "_links": {
+                "self": {"href": "/api/v3/work_packages/131"},
+                "project": {"href": "/api/v3/projects/1"},
+            },
+        }
+
+        route = respx.post(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(201, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "create_work_package",
+            {"params": {"project_id": 1, "subject": unicode_subject}},
+        )
+
+        assert route.called
+        request_body = json.loads(route.calls.last.request.content)
+        assert request_body["subject"] == unicode_subject
+
+
+# ============================================================================
 # Test: add_comment
 # ============================================================================
 
@@ -1432,3 +1885,445 @@ class TestAppendWorkPackageDescription:
 
         assert get_route.called
         assert patch_route.called
+
+
+# ============================================================================
+# Test: list_work_packages
+# ============================================================================
+
+
+class TestListWorkPackages:
+    """Test suite for list_work_packages tool."""
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_basic(self, server, base_url):
+        """Test basic work package listing for a project."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 3,
+            "total": 3,
+            "_embedded": {
+                "elements": [
+                    {
+                        "id": 1,
+                        "subject": "Task 1",
+                        "_links": {
+                            "self": {"href": "/api/v3/work_packages/1"},
+                            "project": {"href": "/api/v3/projects/123"},
+                        },
+                    },
+                    {
+                        "id": 2,
+                        "subject": "Task 2",
+                        "_links": {
+                            "self": {"href": "/api/v3/work_packages/2"},
+                            "project": {"href": "/api/v3/projects/123"},
+                        },
+                    },
+                    {
+                        "id": 3,
+                        "subject": "Task 3",
+                        "_links": {
+                            "self": {"href": "/api/v3/work_packages/3"},
+                            "project": {"href": "/api/v3/projects/123"},
+                        },
+                    },
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_work_packages", {"params": {"project_id": 123}}
+        )
+
+        assert route.called
+        # Verify project filter is applied
+        filters_param = route.calls.last.request.url.params.get("filters")
+        assert filters_param is not None
+        filters = json.loads(filters_param)
+        assert filters[0]["project"]["operator"] == "="
+        assert filters[0]["project"]["values"] == ["123"]
+
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 3
+        assert len(response_data["_embedded"]["elements"]) == 3
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_with_pagination(self, server, base_url):
+        """Test work package listing with pagination."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 10,
+            "pageSize": 2,
+            "offset": 2,
+            "_embedded": {
+                "elements": [
+                    {"id": 3, "subject": "WP 3"},
+                    {"id": 4, "subject": "WP 4"},
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_work_packages",
+            {"params": {"project_id": 123, "page_size": 2, "offset": 2}},
+        )
+
+        assert route.called
+        assert route.calls.last.request.url.params.get("pageSize") == "2"
+        assert route.calls.last.request.url.params.get("offset") == "2"
+
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 2
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_with_sorting(self, server, base_url):
+        """Test work package listing with sorting."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 2,
+            "_embedded": {"elements": []},
+        }
+
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_work_packages",
+            {"params": {"project_id": 123, "sort_by": "subject"}},
+        )
+
+        assert route.called
+        sortby_param = route.calls.last.request.url.params.get("sortBy")
+        assert sortby_param is not None
+        sortby = json.loads(sortby_param)
+        assert sortby == [["subject", "asc"]]
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_with_desc_sorting(self, server, base_url):
+        """Test work package listing with descending sort order."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 0,
+            "total": 0,
+            "_embedded": {"elements": []},
+        }
+
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_work_packages",
+            {"params": {"project_id": 123, "sort_by": "-updatedAt"}},
+        )
+
+        assert route.called
+        sortby_param = route.calls.last.request.url.params.get("sortBy")
+        sortby = json.loads(sortby_param)
+        assert sortby == [["updatedAt", "desc"]]
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_with_filters(self, server, base_url):
+        """Test work package listing with additional filters."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 1,
+            "total": 1,
+            "_embedded": {
+                "elements": [
+                    {"id": 1, "subject": "Open Task", "status": {"name": "Open"}}
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_work_packages",
+            {
+                "params": {
+                    "project_id": 123,
+                    "filters": {"status": {"operator": "o", "values": []}},
+                }
+            },
+        )
+
+        assert route.called
+        filters_param = route.calls.last.request.url.params.get("filters")
+        filters = json.loads(filters_param)
+        # Should have project filter + status filter
+        assert len(filters) == 2
+        assert filters[0]["project"]["operator"] == "="
+        assert filters[1]["status"]["operator"] == "o"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_empty(self, server, base_url):
+        """Test listing when no work packages exist."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 0,
+            "total": 0,
+            "_embedded": {"elements": []},
+        }
+
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_work_packages", {"params": {"project_id": 123}}
+        )
+
+        assert route.called
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 0
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_project_not_found(self, server, base_url):
+        """Test error when project doesn't exist."""
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(404, json={"message": "Project not found"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "list_work_packages", {"params": {"project_id": 99999}}
+            )
+
+        assert route.called
+        assert "Resource not found" in str(exc_info.value)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_work_packages_unauthorized(self, server, base_url):
+        """Test error handling for unauthorized access."""
+        route = respx.get(f"{base_url}/work_packages").mock(
+            return_value=httpx.Response(401, json={"message": "Unauthorized"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "list_work_packages", {"params": {"project_id": 123}}
+            )
+
+        assert route.called
+        assert "Authentication failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_list_work_packages_invalid_project_id(self, server):
+        """Test validation error for invalid project ID."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "list_work_packages", {"params": {"project_id": 0}}
+            )
+
+        assert "validation" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_list_work_packages_invalid_page_size(self, server):
+        """Test validation error for invalid page size."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool(
+                "list_work_packages", {"params": {"project_id": 123, "page_size": 0}}
+            )
+
+        assert "validation" in str(exc_info.value).lower()
+
+
+# ============================================================================
+# Test: list_types
+# ============================================================================
+
+
+class TestListTypes:
+    """Test suite for list_types tool."""
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_types_basic(self, server, base_url):
+        """Test basic type listing."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 4,
+            "total": 4,
+            "_embedded": {
+                "elements": [
+                    {
+                        "id": 1,
+                        "name": "Task",
+                        "isMilestone": False,
+                        "isDefault": True,
+                        "color": "#1A67A3",
+                    },
+                    {
+                        "id": 2,
+                        "name": "Bug",
+                        "isMilestone": False,
+                        "isDefault": False,
+                        "color": "#E73E3E",
+                    },
+                    {
+                        "id": 3,
+                        "name": "Feature",
+                        "isMilestone": False,
+                        "isDefault": False,
+                        "color": "#32B1A5",
+                    },
+                    {
+                        "id": 4,
+                        "name": "Milestone",
+                        "isMilestone": True,
+                        "isDefault": False,
+                        "color": "#D4D4D4",
+                    },
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/types").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool("list_types", {"params": {}})
+
+        assert route.called
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 4
+        assert len(response_data["_embedded"]["elements"]) == 4
+        # Verify it includes different type attributes
+        elements = response_data["_embedded"]["elements"]
+        assert any(e["isMilestone"] for e in elements)
+        assert any(e["isDefault"] for e in elements)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_types_with_pagination(self, server, base_url):
+        """Test type listing with pagination."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 5,
+            "pageSize": 2,
+            "offset": 2,
+            "_embedded": {
+                "elements": [
+                    {"id": 3, "name": "Feature", "isMilestone": False},
+                    {"id": 4, "name": "Epic", "isMilestone": False},
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/types").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_types", {"params": {"page_size": 2, "offset": 2}}
+        )
+
+        assert route.called
+        assert route.calls.last.request.url.params.get("pageSize") == "2"
+        assert route.calls.last.request.url.params.get("offset") == "2"
+
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 2
+        assert response_data["offset"] == 2
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_types_empty(self, server, base_url):
+        """Test listing when no types exist (edge case)."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 0,
+            "total": 0,
+            "_embedded": {"elements": []},
+        }
+
+        route = respx.get(f"{base_url}/types").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool("list_types", {"params": {}})
+
+        assert route.called
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 0
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_types_unauthorized(self, server, base_url):
+        """Test error handling for unauthorized access."""
+        route = respx.get(f"{base_url}/types").mock(
+            return_value=httpx.Response(401, json={"message": "Unauthorized"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_types", {"params": {}})
+
+        assert route.called
+        assert "Authentication failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_list_types_invalid_page_size(self, server):
+        """Test validation error for invalid page size."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_types", {"params": {"page_size": 0}})
+
+        assert "validation" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_list_types_page_size_too_large(self, server):
+        """Test validation error for page size exceeding maximum."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_types", {"params": {"page_size": 2000}})
+
+        assert "validation" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_list_types_invalid_offset(self, server):
+        """Test validation error for invalid offset."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_types", {"params": {"offset": 0}})
+
+        assert "validation" in str(exc_info.value).lower()
+

@@ -49,7 +49,7 @@ class OpenProjectClient:
     @property
     def headers(self) -> dict:
         return {
-            "Authorization": f"Bearer {self.settings.api_key}",
+            "Authorization": f"apikey {self.settings.api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }

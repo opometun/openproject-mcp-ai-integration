@@ -12,6 +12,19 @@ from openproject_mcp.errors import map_http_error
 # ============================================================================
 
 
+class ListProjectsIn(BaseModel):
+    """Input parameters for listing projects"""
+
+    page_size: int = Field(100, description="Number of results per page", gt=0, le=1000)
+    offset: int = Field(1, description="Page offset for pagination", gt=0)
+    filters: Optional[Dict[str, Any]] = Field(
+        None, description="Optional filters to apply (e.g., active status)"
+    )
+    sort_by: Optional[str] = Field(
+        None, description="Sort order, e.g., 'name' or 'created_at'"
+    )
+
+
 class GetProjectMembershipsIn(BaseModel):
     """Input parameters for getting project memberships"""
 
@@ -83,6 +96,65 @@ def register(server: FastMCP, settings: Settings | None = None):
     """Register all project tools with the MCP server"""
     settings = settings or Settings()
     client = OpenProjectClient(settings)
+
+    @server.tool("list_projects", description="List all accessible projects")
+    async def list_projects(params: ListProjectsIn) -> dict:
+        """
+        Retrieve a list of all projects accessible to the authenticated user.
+
+        Supports pagination, filtering, and sorting.
+
+        Args:
+            params: Validated input with page_size, offset, filters, and sort_by
+
+        Returns:
+            dict: Collection of project objects
+
+        Note:
+            - Returns projects the user has access to view
+            - Supports custom filters (e.g., active projects only)
+            - Default page size is 100, maximum is 1000
+            - Results include project metadata like id, identifier, name, description
+        """
+        try:
+            # Build query parameters
+            query_params = {
+                "pageSize": params.page_size,
+                "offset": params.offset,
+            }
+
+            # Add filters if provided
+            if params.filters:
+                filters = []
+                for filter_id, filter_config in params.filters.items():
+                    if isinstance(filter_config, dict) and "operator" in filter_config:
+                        filters.append(
+                            {
+                                filter_id: {
+                                    "operator": filter_config["operator"],
+                                    "values": filter_config.get("values", []),
+                                }
+                            }
+                        )
+                if filters:
+                    query_params["filters"] = str(filters)
+
+            # Add sorting if provided
+            if params.sort_by:
+                # Convert simple string to OpenProject sortBy format
+                # e.g., "name" -> [["name", "asc"]]
+                sort_order = "asc"
+                sort_field = params.sort_by
+                if params.sort_by.startswith("-"):
+                    sort_order = "desc"
+                    sort_field = params.sort_by[1:]
+                query_params["sortBy"] = str([[sort_field, sort_order]])
+
+            res = await client.get("/projects", params=query_params)
+            return res.json()
+
+        except httpx.HTTPStatusError as e:
+            map_http_error(e.response.status_code, e.response.text[:300])
 
     @server.tool(
         "get_project_memberships",

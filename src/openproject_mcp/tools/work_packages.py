@@ -14,10 +14,21 @@ from openproject_mcp.errors import map_http_error
 # Input Models (Request Parameters)
 # ============================================================================
 
+class CreateWorkPackageIn(BaseModel):
+    """Input parameters for creating a work package"""
+    project_id: int = Field(..., description="Project ID where work package will be created", gt=0)
+    subject: str = Field(..., description="Work package subject/title", min_length=1)
+    type_id: Optional[int] = Field(None, description="Type ID (Task, Bug, etc.). If not provided, uses project default", gt=0)
+    status_id: Optional[int] = Field(None, description="Status ID. If not provided, uses default status", gt=0)
+    description: Optional[str] = Field(None, description="Work package description in markdown")
+    assignee_id: Optional[int] = Field(None, description="Assignee user ID", gt=0)
+    start_date: Optional[str] = Field(None, description="Start date in ISO 8601 format (YYYY-MM-DD)")
+    due_date: Optional[str] = Field(None, description="Due date (end date) in ISO 8601 format (YYYY-MM-DD)")
+    estimated_time: Optional[str] = Field(None, description="Estimated time in ISO 8601 duration format (e.g., 'PT8H' for 8 hours)")
+    priority_id: Optional[int] = Field(None, description="Priority ID", gt=0)
 
 class AddCommentIn(BaseModel):
     """Input parameters for adding a comment to a work package"""
-
     id: int = Field(..., description="Work package ID", gt=0)
     comment: str = Field(..., description="Comment text in markdown", min_length=1)
     notify: bool = Field(False, description="Send email notifications to watchers")
@@ -80,6 +91,23 @@ class ResolveTypeIn(BaseModel):
     )
 
 
+class ListWorkPackagesIn(BaseModel):
+    """Input parameters for listing work packages"""
+
+    project_id: int = Field(..., description="Project ID to list work packages from", gt=0)
+    page_size: int = Field(100, description="Number of results per page", gt=0, le=1000)
+    offset: int = Field(1, description="Page offset for pagination", gt=0)
+    filters: Optional[dict] = Field(None, description="Optional additional filters")
+    sort_by: Optional[str] = Field(None, description="Sort field (e.g., 'id', 'subject', 'updatedAt')")
+
+
+class ListTypesIn(BaseModel):
+    """Input parameters for listing all work package types"""
+
+    page_size: int = Field(100, description="Number of results per page", gt=0, le=1000)
+    offset: int = Field(1, description="Page offset for pagination", gt=0)
+
+
 # ============================================================================
 # Output Models (Response Data - Optional but Recommended)
 # ============================================================================
@@ -127,6 +155,65 @@ def register(server: FastMCP, settings: Settings | None = None):
     """Register all work package tools with the MCP server"""
     settings = settings or Settings()
     client = OpenProjectClient(settings)
+
+    @server.tool("create_work_package", description="Create a work package")
+    async def create_work_package(params: CreateWorkPackageIn) -> dict:
+        """
+        Create a new work package in OpenProject.
+        
+        Args:
+            params: Work package creation parameters including project_id, subject, 
+                   and optional fields like type_id, description, dates, etc.
+        
+        Returns:
+            dict: Created work package data
+        """
+        try:
+            # Build the payload
+            payload = {
+                "_links": {
+                    "project": {"href": f"/api/v3/projects/{params.project_id}"}
+                },
+                "subject": params.subject,
+            }
+            
+            # Add type if specified
+            if params.type_id:
+                payload["_links"]["type"] = {"href": f"/api/v3/types/{params.type_id}"}
+            
+            # Add status if specified
+            if params.status_id:
+                payload["_links"]["status"] = {"href": f"/api/v3/statuses/{params.status_id}"}
+            
+            # Add assignee if specified
+            if params.assignee_id:
+                payload["_links"]["assignee"] = {"href": f"/api/v3/users/{params.assignee_id}"}
+            
+            # Add priority if specified
+            if params.priority_id:
+                payload["_links"]["priority"] = {"href": f"/api/v3/priorities/{params.priority_id}"}
+            
+            # Add description if specified
+            if params.description:
+                payload["description"] = {"raw": params.description}
+            
+            # Add start date if specified
+            if params.start_date:
+                payload["startDate"] = params.start_date
+            
+            # Add due date if specified
+            if params.due_date:
+                payload["dueDate"] = params.due_date
+            
+            # Add estimated time if specified
+            if params.estimated_time:
+                payload["estimatedTime"] = params.estimated_time
+            
+            # Create the work package
+            res = await client.post("/work_packages", json=payload)
+            return res.json()
+        except httpx.HTTPStatusError as e:
+            map_http_error(e.response.status_code, e.response.text[:300])
 
     @server.tool("add_comment", description="Add a comment to a work package")
     async def add_comment(params: AddCommentIn) -> dict:
@@ -584,6 +671,104 @@ def register(server: FastMCP, settings: Settings | None = None):
                 }
 
             return {"error": f"No type found matching '{params.name}'"}
+
+        except httpx.HTTPStatusError as e:
+            map_http_error(e.response.status_code, e.response.text[:300])
+
+    @server.tool(
+        "list_work_packages",
+        description="List work packages in a project with optional filtering and sorting",
+    )
+    async def list_work_packages(params: ListWorkPackagesIn) -> dict:
+        """
+        Retrieve a list of work packages from a specific project.
+
+        Supports pagination, filtering, and sorting.
+
+        Args:
+            params: Validated input with project_id, page_size, offset, filters, and sort_by
+
+        Returns:
+            dict: Collection of work package objects
+
+        Note:
+            - Returns work packages from the specified project
+            - Supports custom filters (e.g., status, type, assignee)
+            - Default page size is 100, maximum is 1000
+            - Results include work package details like id, subject, status, type, etc.
+        """
+        try:
+            # Build filters - always filter by project
+            filters = [
+                {"project": {"operator": "=", "values": [str(params.project_id)]}}
+            ]
+
+            # Add any additional filters
+            if params.filters:
+                for filter_id, filter_config in params.filters.items():
+                    if isinstance(filter_config, dict) and "operator" in filter_config:
+                        filters.append(
+                            {
+                                filter_id: {
+                                    "operator": filter_config["operator"],
+                                    "values": filter_config.get("values", []),
+                                }
+                            }
+                        )
+
+            # Build query parameters
+            query_params = {
+                "pageSize": params.page_size,
+                "offset": params.offset,
+                "filters": json.dumps(filters),
+            }
+
+            # Add sorting if provided
+            if params.sort_by:
+                # Convert simple string to OpenProject sortBy format
+                sort_order = "asc"
+                sort_field = params.sort_by
+                if params.sort_by.startswith("-"):
+                    sort_order = "desc"
+                    sort_field = params.sort_by[1:]
+                query_params["sortBy"] = json.dumps([[sort_field, sort_order]])
+
+            res = await client.get("/work_packages", params=query_params)
+            return res.json()
+
+        except httpx.HTTPStatusError as e:
+            map_http_error(e.response.status_code, e.response.text[:300])
+
+    @server.tool(
+        "list_types",
+        description="List all available work package types in the system",
+    )
+    async def list_types(params: ListTypesIn) -> dict:
+        """
+        Retrieve a list of all work package types available in the system.
+
+        Supports pagination.
+
+        Args:
+            params: Validated input with page_size and offset
+
+        Returns:
+            dict: Collection of type objects
+
+        Note:
+            - Returns all types available in the OpenProject instance
+            - Default page size is 100, maximum is 1000
+            - Each type includes id, name, isMilestone, isDefault, color, etc.
+        """
+        try:
+            # Build query parameters
+            query_params = {
+                "pageSize": params.page_size,
+                "offset": params.offset,
+            }
+
+            res = await client.get("/types", params=query_params)
+            return res.json()
 
         except httpx.HTTPStatusError as e:
             map_http_error(e.response.status_code, e.response.text[:300])

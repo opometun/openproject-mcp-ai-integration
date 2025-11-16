@@ -34,6 +34,213 @@ def base_url(mock_settings):
 
 
 # ============================================================================
+# Test: list_projects
+# ============================================================================
+
+
+class TestListProjects:
+    """Test suite for list_projects tool."""
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_projects_basic(self, server, base_url):
+        """Test basic project listing."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 3,
+            "total": 3,
+            "_embedded": {
+                "elements": [
+                    {
+                        "id": 1,
+                        "identifier": "project-1",
+                        "name": "Project One",
+                        "description": {"raw": "First project"},
+                        "_links": {"self": {"href": "/api/v3/projects/1"}},
+                    },
+                    {
+                        "id": 2,
+                        "identifier": "project-2",
+                        "name": "Project Two",
+                        "description": {"raw": "Second project"},
+                        "_links": {"self": {"href": "/api/v3/projects/2"}},
+                    },
+                    {
+                        "id": 3,
+                        "identifier": "project-3",
+                        "name": "Project Three",
+                        "description": {"raw": "Third project"},
+                        "_links": {"self": {"href": "/api/v3/projects/3"}},
+                    },
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/projects").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool("list_projects", {"params": {}})
+
+        assert route.called
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 3
+        assert len(response_data["_embedded"]["elements"]) == 3
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_projects_with_pagination(self, server, base_url):
+        """Test project listing with custom pagination."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 10,
+            "pageSize": 2,
+            "offset": 3,
+            "_embedded": {
+                "elements": [
+                    {"id": 5, "identifier": "proj-5", "name": "Project 5"},
+                    {"id": 6, "identifier": "proj-6", "name": "Project 6"},
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/projects").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_projects", {"params": {"page_size": 2, "offset": 3}}
+        )
+
+        assert route.called
+        # Verify query parameters
+        assert route.calls.last.request.url.params.get("pageSize") == "2"
+        assert route.calls.last.request.url.params.get("offset") == "3"
+
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 2
+        assert response_data["offset"] == 3
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_projects_with_sorting(self, server, base_url):
+        """Test project listing with sorting."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 2,
+            "_embedded": {
+                "elements": [
+                    {"id": 1, "identifier": "alpha", "name": "Alpha Project"},
+                    {"id": 2, "identifier": "beta", "name": "Beta Project"},
+                ]
+            },
+        }
+
+        route = respx.get(f"{base_url}/projects").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_projects", {"params": {"sort_by": "name"}}
+        )
+
+        assert route.called
+        # Verify sortBy parameter
+        sortby_param = route.calls.last.request.url.params.get("sortBy")
+        assert sortby_param is not None
+        assert "name" in sortby_param
+        assert "asc" in sortby_param
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_projects_with_desc_sorting(self, server, base_url):
+        """Test project listing with descending sort order."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 2,
+            "total": 2,
+            "_embedded": {"elements": []},
+        }
+
+        route = respx.get(f"{base_url}/projects").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool(
+            "list_projects", {"params": {"sort_by": "-created_at"}}
+        )
+
+        assert route.called
+        sortby_param = route.calls.last.request.url.params.get("sortBy")
+        assert "created_at" in sortby_param
+        assert "desc" in sortby_param
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_projects_empty(self, server, base_url):
+        """Test listing when no projects exist."""
+        import json
+
+        expected_response = {
+            "_type": "Collection",
+            "count": 0,
+            "total": 0,
+            "_embedded": {"elements": []},
+        }
+
+        route = respx.get(f"{base_url}/projects").mock(
+            return_value=httpx.Response(200, json=expected_response)
+        )
+
+        result = await server.call_tool("list_projects", {"params": {}})
+
+        assert route.called
+        response_data = json.loads(result[0].text)
+        assert response_data["count"] == 0
+        assert len(response_data["_embedded"]["elements"]) == 0
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_list_projects_unauthorized(self, server, base_url):
+        """Test error handling for unauthorized access."""
+        route = respx.get(f"{base_url}/projects").mock(
+            return_value=httpx.Response(401, json={"message": "Unauthorized"})
+        )
+
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_projects", {"params": {}})
+
+        assert route.called
+        assert "Authentication failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_list_projects_invalid_page_size(self, server):
+        """Test validation error for invalid page size."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_projects", {"params": {"page_size": 0}})
+
+        assert "validation" in str(exc_info.value).lower()
+
+    @pytest.mark.asyncio
+    async def test_list_projects_page_size_too_large(self, server):
+        """Test validation error for page size exceeding maximum."""
+        with pytest.raises(ToolError) as exc_info:
+            await server.call_tool("list_projects", {"params": {"page_size": 2000}})
+
+        assert "validation" in str(exc_info.value).lower()
+
+
+# ============================================================================
 # Test: get_project_memberships
 # ============================================================================
 

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, AnyHttpUrl
+from pathlib import Path
 import os
 
 
@@ -7,23 +8,22 @@ class Settings(BaseSettings):
     """OpenProject MCP Server configuration settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(Path(__file__).parent.parent.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        env_prefix="OPENPROJECT_",
     )
 
-    # Will read from OPENPROJECT_URL or OPENPROJECT_BASE_URL
+    # Will read from OPENPROJECT_URL
     url: AnyHttpUrl = Field(
-        default_factory=lambda: os.getenv("OPENPROJECT_URL")
-        or os.getenv("OPENPROJECT_BASE_URL"),
+        ...,
         description="OpenProject instance URL (e.g. https://openproject.example.com)",
     )
 
-    # Will read from OPENPROJECT_API_KEY or OPENPROJECT_API_TOKEN
+    # Will read from OPENPROJECT_API_KEY
     api_key: str = Field(
-        default_factory=lambda: os.getenv("OPENPROJECT_API_KEY")
-        or os.getenv("OPENPROJECT_API_TOKEN"),
+        ...,
         description="API key with API v3 access",
     )
 
